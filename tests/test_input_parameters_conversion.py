@@ -19,7 +19,8 @@ class ArraySettings(ArchiveSection):
 
 class NumberedValue(ArchiveSection):
     index = Quantity(type=int)
-    value = Quantity(type=int)
+    is_default = Quantity(type=bool)
+    value = Quantity(type=float)
 
 
 class ConvertedParameters(ArchiveSection):
@@ -48,6 +49,23 @@ def test_nomad_accepts_numpy_enum_arrays_and_scalars(enum_array):
     assert converted.settings.single == '3'
     assert converted.settings.iterations == 7
     np.testing.assert_allclose(converted.settings.vectors, [1.25, 2.5])
-    assert [(item.index, item.value) for item in converted.numbered] == [
-        (1, 11), (2, 12),
+    assert [(item.index, bool(item.is_default), item.value) for item in converted.numbered] == [
+        (1, False, 11.0), (2, False, 12.0),
+    ]
+
+
+@pytest.mark.parametrize('numbered, expected', [
+    ({'def': np.float64(1.0)}, [(None, True, 1.0)]),
+    ({'def': np.float64(1.0), 2: np.float64(2.5)}, [
+        (None, True, 1.0), (2, None, 2.5),
+    ]),
+    ({'1': np.float64(3.0), 4: np.float64(5.0)}, [
+        (1, None, 3.0), (4, None, 5.0),
+    ]),
+])
+def test_numbered_values_preserve_default_and_indices(numbered, expected):
+    data = SimpleNamespace(to_dict=lambda: {'NUMBERED': numbered})
+    converted = nomad_section_from_sprkkr(ConvertedParameters, data)
+    assert [(item.index, bool(item.is_default), item.value) for item in converted.numbered] == [
+        (index, bool(is_default), value) for index, is_default, value in expected
     ]
