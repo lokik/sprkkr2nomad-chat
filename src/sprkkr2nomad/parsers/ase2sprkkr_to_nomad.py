@@ -1,6 +1,8 @@
 """ Functions in this module are used to create NOMAD schema
 form ASE2SPRKKR schema of input parameters """
 
+import numpy as np
+
 from nomad.metainfo import Quantity, MEnum, SubSection
 from nomad.datamodel import ArchiveSection
 
@@ -112,6 +114,13 @@ def nomad_section_from_sprkkr(nomad_class, data):
     dct = data.to_dict() or {}
 
     def normalize(value):
+        # NOMAD's MEnum quantities accept Python lists for array-valued
+        # enums, not NumPy arrays (including dtype=object arrays produced
+        # by ASE2SPRKKR). Also convert NumPy scalars to Python scalars.
+        if isinstance(value, np.ndarray):
+            return normalize(value.tolist())
+        if isinstance(value, np.generic):
+            return value.item()
         if isinstance(value, dict):
             # Convert numbered repeated dicts to list of index/value pairs.
             if value and all(isinstance(k, int) for k in value.keys()):
@@ -123,7 +132,7 @@ def nomad_section_from_sprkkr(nomad_class, data):
                 (k.lower() if isinstance(k, str) else k): normalize(v)
                 for k, v in value.items()
             }
-        if isinstance(value, list):
+        if isinstance(value, (list, tuple)):
             return [normalize(v) for v in value]
         return value
 
