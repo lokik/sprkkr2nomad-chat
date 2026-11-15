@@ -1,6 +1,8 @@
 """ Functions in this module are used to create NOMAD schema
 form ASE2SPRKKR schema of input parameters """
 
+import numpy as np
+
 from nomad.metainfo import Quantity, MEnum, SubSection
 from nomad.datamodel import ArchiveSection
 
@@ -31,10 +33,11 @@ def value_to_nomad(definition):
                         nomad_class_name(definition),
                         (ArchiveSection,),
                         { 'index': Quantity(type=int),
+                          'is_default': Quantity(type=bool, description='Wildcard value for unspecified numbered indices.'),
                           'value': grammar_type_to_nomad(gt) },
                         description
                   )
-        out = SubSection(sub_section=section, repeated=True)
+        out = SubSection(sub_section=section, repeats=True)
     else:
         out = grammar_type_to_nomad(gt, description)
     return out
@@ -111,21 +114,61 @@ def nomad_section_from_sprkkr(nomad_class, data):
     # Use all values (explicit + defaults) so input_parameters are complete.
     dct = data.to_dict() or {}
 
-    def normalize(value):
-        if isinstance(value, dict):
-            # Convert numbered repeated dicts to list of index/value pairs.
-            if value and all(isinstance(k, int) for k in value.keys()):
-                return [
-                    {'index': k, 'value': normalize(v)}
-                    for k, v in value.items()
-                ]
-            return {
-                (k.lower() if isinstance(k, str) else k): normalize(v)
-                for k, v in value.items()
-            }
-        if isinstance(value, list):
-            return [normalize(v) for v in value]
-        return value
+    def normalize(value, section_cls=None):
+        # NumPy arrays/scalars from ASE2SPRKKR are not directly suitable for
+        # NOMAD's MEnum quantities or for its ordinary JSON-like metainfo.
+        if isinstance(value, np.ndarray):
+            return normalize(value.tolist(), section_cls)
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, (list, tuple)):
+            return [normalize(item, section_cls) for item in value]
+        if not isinstance(value, dict):
+            return value
 
-    out = nomad_class.m_from_dict(normalize(dct))
+        # A sparse, numbered ASE2SPRKKR value is a dictionary such as
+        # {"def": 1.0, 2: 2.0}. NOMAD expects a list of repeated sections.
+        # Apply this translation only to sections with the generated
+        # index/value schema; ordinary dictionaries are not numbered values.
+        subsections = (
+            section_cls.m_def.all_sub_sections if section_cls is not None else {}
+        )
+        result = {}
+        for key, item in value.items():
+            name = key.lower() if isinstance(key, str) else key
+            sub = subsections.get(name)
+            if sub is None:
+                result[name] = normalize(item)
+                continue
+
+            child_cls = sub.sub_section.section_cls
+            if sub.repeats and {'index', 'is_default', 'value'} <= set(
+                child_cls.m_def.all_quantities
+            ):
+                if isinstance(item, dict):
+                    items = []
+                    for index, entry in item.items():
+                        if index == 'def':
+                            items.append({
+                                'is_default': True,
+                                'value': normalize(entry),
+                            })
+                        else:
+                            # ASE2SPRKKR normally supplies int keys, but
+                            # serialized input can also contain digit strings.
+                            index = int(index)
+                            if index < 1:
+                                raise ValueError('Numbered SPR-KKR indices must be positive')
+                            items.append({
+                                'index': index,
+                                'value': normalize(entry),
+                            })
+                else:
+                    items = item
+                result[name] = normalize(items, child_cls)
+            else:
+                result[name] = normalize(item, child_cls)
+        return result
+
+    out = nomad_class.m_from_dict(normalize(dct, nomad_class))
     return out

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 from ase.units import Bohr
+from ase2sprkkr.common.file_utils import filename_from_file
 from nomad.metainfo import Quantity, SubSection
 from nomad.units import ureg
 from nomad_simulations.schema_packages.numerical_settings import (
@@ -104,7 +105,7 @@ class SprkkrBsfParser(SprkkrTaskParser, task_name='bsfek'):
 
     def _path_points(self, bsf):
         """Use the printed KA/KE endpoints and INDKDIR counts per segment."""
-        filename = getattr(self.output.output_file, 'name', self.output.output_file)
+        filename = filename_from_file(self.output.output_file)
         text = Path(filename).read_text()
         labels = [''.join(str(label).split()) for label in bsf.LBLKDIR()]
         ends = np.asarray(bsf.INDKDIR(), dtype=int)

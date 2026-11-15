@@ -9,7 +9,9 @@ readme = "README.md"
 requires-python = ">= 3.12"
 dependencies = [
   "ase",
-  "ase2sprkkr>=3.5.0b0",
+  # The parser still relies on the ASE2SPRKKR 3.x output-files API.
+  # Version 4 reorganizes it under result_files; migrate separately.
+  "ase2sprkkr>=3.6.0,<4",
   "asr",
   "nomad-lab>=1.4.2,<2",
   "nomad-simulation-parsers @ git+https://github.com/FAIRmat-NFDI/nomad-parser-plugins-simulation.git@edb54cd190719c01defd87eedc1866b365f03a56",

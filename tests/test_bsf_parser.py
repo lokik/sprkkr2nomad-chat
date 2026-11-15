@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from ase.units import Bohr
 from ase2sprkkr.output_files.output_files import CommonOutputFile
+from ase2sprkkr.common.file_utils import filename_from_file
 from ase2sprkkr.outputs.task_result import TaskResult
 from nomad.config import config
 from nomad.datamodel import EntryArchive, EntryMetadata
@@ -34,12 +35,27 @@ def source():
     return TaskResult.from_file(str(ROOT / 'examples/Fe_Bsf/Fe_BSFEK.out'))
 
 
+def test_output_file_has_filename(source):
+    # The result can carry a file-backed stream or an os.PathLike object.
+    filename = filename_from_file(source.output_file)
+    assert Path(filename).name == 'Fe_BSFEK.out'
+    assert Path(filename).is_file()
+
+
+def test_bsf_input_fixture_is_valid():
+    from ase2sprkkr.input_parameters.input_parameters import InputParameters
+
+    params = InputParameters.from_file(ROOT / 'examples/Fe_Bsf/Fe_BSF.inp')
+    assert params.task_name == 'bsfek'
+    assert params.TASK.KPATH() == 1
+
+
 def parse_bsf(source, bsf):
     output = SimpleNamespace(
         potential=source.potential, input_parameters=source.input_parameters,
         program_info=source.program_info, output_file=source.output_file, bsf=bsf,
     )
-    archive = EntryArchive(metadata=EntryMetadata(mainfile=source.output_file.name))
+    archive = EntryArchive(metadata=EntryMetadata(mainfile=Path(filename_from_file(source.output_file)).name))
     SprkkrBsfParser(output).parse(archive)
     return archive
 
@@ -49,6 +65,7 @@ def test_bsf_matching_and_json(filename, source):
     path = str(ROOT / 'examples/Fe_Bsf' / filename)
     parser, keys = match_parser(path)
     assert parser.name == 'sprkkr2nomad.parsers:sprkkr_parser'
+    parsed_source = TaskResult.from_file(path)
     if filename == 'Fe_BSF.out':
         with pytest.warns(UserWarning, match='preserving path distances'):
             archive = run_parser(path, parser, keys, logger=LOGGER)[0]
@@ -57,15 +74,15 @@ def test_bsf_matching_and_json(filename, source):
 
     settings = archive.data.model_method[0].numerical_settings
     sampling = next(item for item in settings if isinstance(item, BsfSampling))
-    np.testing.assert_array_equal(sampling.parameters.points[:, 0], source.bsf.K())
-    np.testing.assert_array_equal(sampling.segment_end_indices, source.bsf.INDKDIR())
+    np.testing.assert_array_equal(sampling.parameters.points[:, 0], parsed_source.bsf.K())
+    np.testing.assert_array_equal(sampling.segment_end_indices, parsed_source.bsf.INDKDIR())
 
     native = archive.m_to_dict()
     exported = to_json_dict(archive)
     json.dumps(exported, allow_nan=False)
     properties = archive.data.outputs[0].electronic_greens_functions
     assert len(properties) == 2
-    for spin, expected in enumerate([source.bsf.I_UP(), source.bsf.I_DOWN()]):
+    for spin, expected in enumerate([parsed_source.bsf.I_UP(), parsed_source.bsf.I_DOWN()]):
         ref = native['data']['outputs'][0]['electronic_greens_functions'][spin]['value']
         assert ref.startswith('/uploads/') and ref.endswith(f'/{spin}/value')
         value = exported['data']['outputs'][0]['electronic_greens_functions'][spin]['value']
