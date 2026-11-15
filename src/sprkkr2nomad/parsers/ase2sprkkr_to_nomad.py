@@ -36,7 +36,7 @@ def value_to_nomad(definition):
                           'value': grammar_type_to_nomad(gt) },
                         description
                   )
-        out = SubSection(sub_section=section, repeated=True)
+        out = SubSection(sub_section=section, repeats=True)
     else:
         out = grammar_type_to_nomad(gt, description)
     return out

@@ -24,7 +24,7 @@ class NumberedValue(ArchiveSection):
 
 class ConvertedParameters(ArchiveSection):
     settings = SubSection(sub_section=ArraySettings)
-    numbered = SubSection(sub_section=NumberedValue, repeated=True)
+    numbered = SubSection(sub_section=NumberedValue, repeats=True)
 
 
 @pytest.mark.parametrize('enum_array', [

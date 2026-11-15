@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from ase.units import Bohr
 from ase2sprkkr.output_files.output_files import CommonOutputFile
+from ase2sprkkr.common.file_utils import filename_from_file
 from ase2sprkkr.outputs.task_result import TaskResult
 from nomad.config import config
 from nomad.datamodel import EntryArchive, EntryMetadata
@@ -34,10 +35,11 @@ def source():
     return TaskResult.from_file(str(ROOT / 'examples/Fe_Bsf/Fe_BSFEK.out'))
 
 
-def test_output_file_is_path_like(source):
-    # ASE2SPRKKR 3.6 exposes output_file as os.PathLike, not pathlib.Path.
-    assert Path(source.output_file).name == 'Fe_BSFEK.out'
-    assert Path(source.output_file).is_file()
+def test_output_file_has_filename(source):
+    # The result can carry a file-backed stream or an os.PathLike object.
+    filename = filename_from_file(source.output_file)
+    assert Path(filename).name == 'Fe_BSFEK.out'
+    assert Path(filename).is_file()
 
 
 def test_bsf_input_fixture_is_valid():
@@ -53,7 +55,7 @@ def parse_bsf(source, bsf):
         potential=source.potential, input_parameters=source.input_parameters,
         program_info=source.program_info, output_file=source.output_file, bsf=bsf,
     )
-    archive = EntryArchive(metadata=EntryMetadata(mainfile=Path(source.output_file).name))
+    archive = EntryArchive(metadata=EntryMetadata(mainfile=Path(filename_from_file(source.output_file)).name))
     SprkkrBsfParser(output).parse(archive)
     return archive
 
